@@ -14,8 +14,7 @@
   },
   "dependencies": {
     "@sanity/eventsource": "^0.125.8",
-    "@sanity/observable": "^0.125.8",
-    "get-it": "^4.0.1"
+    "@sanity/observable": "^0.125.8"
   },
   "publishConfig": {
     "access": "public"

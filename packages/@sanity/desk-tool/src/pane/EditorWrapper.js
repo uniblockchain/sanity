@@ -7,6 +7,7 @@ import promiseLatest from 'promise-latest'
 import {omit, throttle, debounce} from 'lodash'
 import FormBuilder, {checkout} from 'part:@sanity/form-builder'
 import schema from 'part:@sanity/base/schema'
+import presenceStore from 'part:@sanity/base/datastore/presence'
 import Button from 'part:@sanity/components/buttons/default'
 import client from 'part:@sanity/base/client'
 import {getDraftId, getPublishedId} from '../utils/draftUtils'
@@ -20,6 +21,7 @@ const INITIAL_DOCUMENT_STATE = {
 }
 
 const INITIAL_STATE = {
+  markers: [],
   isSaving: true,
   isCreatingDraft: false,
   transactionResult: null,
@@ -84,6 +86,9 @@ export default class EditorWrapper extends React.Component {
     this.draft = checkout(getDraftId(documentId))
     this.validateLatestDocument = debounce(promiseLatest(this.validateDocument, 300))
 
+    // Subscribe to state changes about all other users on the channel
+    this.presenceSubscription = presenceStore.presence.subscribe(this.presenceToMarkers)
+
     this.subscription = this.published.events
       .map(event => ({...event, version: 'published'}))
       .merge(
@@ -104,6 +109,20 @@ export default class EditorWrapper extends React.Component {
       })
   }
 
+  presenceToMarkers = states => {
+    const currentDocument = states.filter(presence => presence.documentId === this.props.documentId)
+    const presenceMarkers = currentDocument.map(presence => ({
+      type: 'presence',
+      ...presence
+    }))
+
+    this.setState(prevState => ({
+      markers: prevState.markers
+        .filter(marker => marker.type !== 'presence')
+        .concat(presenceMarkers)
+    }))
+  }
+
   validateDocument = async () => {
     const {draft, published} = this.state
     const doc = (draft && draft.snapshot) || (published && published.snapshot)
@@ -119,7 +138,10 @@ export default class EditorWrapper extends React.Component {
     }
 
     const markers = await validateDocument(doc, schema)
-    this.setStateIfMounted({markers, validationPending: false})
+    this.setStateIfMounted(prevState => ({
+      markers: prevState.markers.filter(marker => marker.type !== 'validation').concat(markers),
+      validationPending: false
+    }))
     return markers
   }
 
@@ -173,6 +195,11 @@ export default class EditorWrapper extends React.Component {
     if (this.subscription) {
       this.subscription.unsubscribe()
       this.subscription = null
+    }
+
+    if (this.presenceSubscription) {
+      this.presenceSubscription.unsubscribe()
+      this.presenceSubscription = null
     }
 
     if (this.validateLatestDocument) {

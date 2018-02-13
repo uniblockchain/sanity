@@ -1,13 +1,11 @@
 /* global window, navigator */
 
-import getIt from 'get-it'
-import getItJsonResponse from 'get-it/lib/middleware/jsonResponse'
-import getItPromise from 'get-it/lib/middleware/promise'
 import Observable from '@sanity/observable/minimal'
 
-const EventSource = typeof window !== 'undefined' && window.EventSource
-? window.EventSource // Native browser EventSource
-: require('@sanity/eventsource') // Node.js, IE etc
+const EventSource =
+  typeof window !== 'undefined' && window.EventSource
+    ? window.EventSource // Native browser EventSource
+    : require('@sanity/eventsource') // Node.js, IE etc
 
 function parseEvent(event) {
   try {
@@ -19,10 +17,6 @@ function parseEvent(event) {
 export default class Reflector {
   constructor(sanityClient) {
     this.sanityClient = sanityClient
-    this.request = getIt([
-      getItJsonResponse(),
-      getItPromise()
-    ])
   }
 
   listen(channel) {
@@ -46,9 +40,7 @@ export default class Reflector {
 
       function onMessage(evt) {
         const event = parseEvent(evt)
-        return event instanceof Error
-          ? observer.error(event)
-          : observer.next(event)
+        return event instanceof Error ? observer.error(event) : observer.next(event)
       }
 
       function unsubscribe() {
@@ -61,21 +53,10 @@ export default class Reflector {
   }
 
   send(channel, message) {
-    const url = this.sanityClient.getUrl(`presence/send/${channel}`)
-
-    let headers = {}
-    const {token} = this.sanityClient.clientConfig
-    if (token) {
-      headers = {
-        Authorization: `Bearer ${token}`
-      }
-    }
-
-    return this.request({
-      url,
+    return this.sanityClient.request({
+      url: `presence/send/${channel}`,
       method: 'POST',
-      headers,
-      body: JSON.stringify(message)
+      body: message
     })
   }
 
