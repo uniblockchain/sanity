@@ -27,6 +27,7 @@
   "dependencies": {
     "@sanity/image-url": "^0.125.8",
     "@sanity/observable": "^0.125.8",
+    "@sanity/mutator": "^0.125.8",
     "lodash": "^4.17.4",
     "observable-props": "^2.0.0",
     "shallow-equals": "^1.0.0"
