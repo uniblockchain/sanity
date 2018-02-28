@@ -21,6 +21,7 @@ import Button from 'part:@sanity/components/buttons/default'
 import PlusIcon from 'part:@sanity/base/plus-icon'
 import Snackbar from 'part:@sanity/components/snackbar/default'
 import {Tooltip} from '@sanity/react-tippy'
+
 const NOOP = () => {} // eslint-disable-line
 
 const LOCALSTORAGE_KEY = 'desk-tool.documents-pane-settings'
@@ -186,6 +187,7 @@ export default withRouterHOC(class DocumentsPane extends React.PureComponent {
   }
 
   renderStatus = item => {
+    console.log(this.props)
     return (
       <div className={styles.itemStatus}>
         {
