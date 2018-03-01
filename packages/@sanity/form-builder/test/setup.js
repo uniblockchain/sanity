@@ -1,12 +1,19 @@
+import randomKey from '../src/inputs/BlockEditor/utils/randomKey'
+import randomKey2 from '@sanity/block-tools/lib/util/randomKey'
+import {setKeyGenerator} from 'slate'
 
-beforeEach(() => { // eslint-disable-line import/unambiguous
-  let testKey = 0
-  const randomKey = require('../src/util/randomKey')
-  randomKey.default = jest.fn(() => {
-    return `randomKey${testKey++}`
+
+beforeEach(() => {
+  let mockIndex = 0
+  const mockKeyFn = () => `randomKey${mockIndex++}`
+
+  jest.mock('../src/inputs/BlockEditor/utils/randomKey', () => {
+    return mockKeyFn
   })
-  const randomKey2 = require('../../block-tools/src/util/randomKey')
-  randomKey2.default = jest.fn(() => {
-    return `randomKey${testKey++}`
+
+  jest.mock('@sanity/block-tools/lib/util/randomKey', () => {
+    return mockKeyFn
   })
+
+  setKeyGenerator(mockKeyFn)
 })

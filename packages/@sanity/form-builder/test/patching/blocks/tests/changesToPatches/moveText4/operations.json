@@ -1,6 +1,31 @@
 [
-  {"kind":"operation","type":"split_node","path":[1,0],"position":2,"target":null},
-  {"kind":"operation","type":"split_node","path":[1,1],"position":2,"target":null},
-  {"kind":"operation","type":"remove_node","path":[1,1]},
-  {"kind":"operation","type":"insert_node","path":[0],"node":{"kind":"block","type":"contentBlock","isVoid":false,"data":{"_type":"block","_key":"7b9f33dc78a6","style":"normal"},"nodes":[{"kind":"text","leaves":[{"kind":"leaf","text":"12","marks":[]}]}]}}
+  {
+    "object": "operation",
+    "type": "split_node",
+    "path": [1, 0],
+    "position": 2,
+    "target": null,
+    "properties": {}
+  },
+  {
+    "object": "operation",
+    "type": "split_node",
+    "path": [1, 1],
+    "position": 2,
+    "target": null,
+    "properties": {}
+  },
+  {"object": "operation", "type": "remove_node", "path": [1, 1]},
+  {
+    "object": "operation",
+    "type": "insert_node",
+    "path": [0],
+    "node": {
+      "object": "block",
+      "type": "contentBlock",
+      "isVoid": false,
+      "data": {"_type": "block", "_key": "7b9f33dc78a6", "style": "normal"},
+      "nodes": [{"object": "text", "leaves": [{"object": "leaf", "text": "12", "marks": []}]}]
+    }
+  }
 ]

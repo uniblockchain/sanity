@@ -1,8 +1,8 @@
 import assert from 'assert'
 import fs from 'fs'
 import path from 'path'
-import {Value} from 'slate'
-import Change from 'slate/lib/models/change'
+import {Change, Value, Operation} from 'slate'
+import {List} from 'immutable'
 import {blocksToEditorValue, editorValueToBlocks} from '@sanity/block-tools'
 import blocksSchema from '../../../../fixtures/blocksSchema'
 import changeToPatches from '../../../../../src/inputs/BlockEditor/utils/changeToPatches'
@@ -24,15 +24,27 @@ describe('changesToPatches', () => {
     it(test, () => {
       const dir = path.resolve(__dirname, test)
       const input = JSON.parse(fs.readFileSync(path.resolve(dir, 'input.json')))
+      const outputPath = path.resolve(dir, 'output.json')
+      let output
+      if (fs.existsSync(outputPath)) {
+        output = JSON.parse(fs.readFileSync(outputPath))
+      }
       const slateValue = deserialize(input)
-      const operations = JSON.parse(fs.readFileSync(path.resolve(dir, 'operations.json')))
+      const operations = new List(
+        JSON.parse(fs.readFileSync(path.resolve(dir, 'operations.json'))).map(operation =>
+          Operation.fromJSON(operation)
+        )
+      )
       const change = new Change({value: slateValue})
       change.applyOperations(operations)
-      const patches = changeToPatches(change, input, blockContentType)
-      const expectedValue = editorValueToBlocks(
-        change.value.toJSON({preserveKeys: true}),
-        blockContentType
-      )
+      const patches = changeToPatches(slateValue, operations, input, blockContentType)
+      let expectedValue = output
+      if (!expectedValue) {
+        expectedValue = editorValueToBlocks(
+          change.value.toJSON({preserveKeys: true}),
+          blockContentType
+        )
+      }
       // console.log(JSON.stringify(patches, null, 2))
       const receivedValue = applyAll(input, patches.patches)
       // console.log(JSON.stringify(receivedValue, null, 2))
