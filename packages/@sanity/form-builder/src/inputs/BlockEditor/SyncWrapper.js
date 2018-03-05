@@ -42,107 +42,122 @@ function isDeprecatedBlockValue(value) {
   return false
 }
 
-export default withPatchSubscriber(class SyncWrapper extends React.PureComponent {
-  static propTypes = {
-    schema: PropTypes.object,
-    value: PropTypes.array,
-    type: PropTypes.object.isRequired,
-    onChange: PropTypes.func,
-    onFocus: PropTypes.func,
-    onBlur: PropTypes.func,
-    subscribe: PropTypes.func
-  }
-
-  _input = null
-
-  constructor(props) {
-    super()
-    const deprecatedSchema = isDeprecatedBlockSchema(props.type)
-    const deprecatedBlockValue = isDeprecatedBlockValue(props.value)
-    this.state = {
-      deprecatedSchema,
-      deprecatedBlockValue,
-      editorValue: (deprecatedSchema || deprecatedBlockValue)
-        ? deserialize([], props.type)
-        : deserialize(props.value, props.type)
+export default withPatchSubscriber(
+  class SyncWrapper extends React.PureComponent {
+    static propTypes = {
+      focusPath: PropTypes.array,
+      onBlur: PropTypes.func,
+      onChange: PropTypes.func,
+      onFocus: PropTypes.func,
+      schema: PropTypes.object,
+      subscribe: PropTypes.func,
+      type: PropTypes.object.isRequired,
+      value: PropTypes.array
     }
-    this.unsubscribe = props.subscribe(this.receivePatches)
-  }
 
-  handleChange = (change: SlateChange) => {
-    const {value, onChange, type} = this.props
-    this.setState({editorValue: change.value})
-    const patches = changeToPatches(change, value, type)
-    onChange(PatchEvent.from(patches))
-  }
+    _input = null
 
-  focus() {
-    this._input.focus()
-  }
-
-  receivePatches = ({patches, shouldReset, snapshot}) => {
-    const {type} = this.props
-    if (patches.some(patch => patch.origin === 'remote')) {
-      const change = patchesToChange(patches, this.state.editorValue, snapshot, type)
-      this.setState({editorValue: change.value})
+    constructor(props) {
+      super()
+      const deprecatedSchema = isDeprecatedBlockSchema(props.type)
+      const deprecatedBlockValue = isDeprecatedBlockValue(props.value)
+      this.state = {
+        deprecatedSchema,
+        deprecatedBlockValue,
+        editorValue:
+          deprecatedSchema || deprecatedBlockValue
+            ? deserialize([], props.type)
+            : deserialize(props.value, props.type)
+      }
+      this.unsubscribe = props.subscribe(this.receivePatches)
     }
-  }
 
-  componentWillUnmount() {
-    this.unsubscribe()
-  }
+    handleChange = (change: SlateChange) => {
+      const {value, onChange, type} = this.props
+      if (change instanceof PatchEvent) {
+        return onChange(change)
+      }
+      const {patches, selection} = changeToPatches(
+        this.state.editorValue,
+        change.operations,
+        value,
+        type
+      )
+      this.setState({editorValue: change.value, selection})
+      return onChange(PatchEvent.from(patches))
+    }
 
-  refInput = (input: Input) => {
-    this._input = input
-  }
+    focus() {
+      this._input.focus()
+    }
 
-  render() {
-    const {editorValue, deprecatedSchema, deprecatedBlockValue} = this.state
-    const {onChange, ...rest} = this.props
-
-    const isDeprecated = deprecatedSchema || deprecatedBlockValue
-    const {type} = this.props
-    return (
-      <div className={styles.root}>
-        {!isDeprecated && (
-          <Input
-            editorValue={editorValue}
-            onChange={this.handleChange}
-            ref={this.refInput}
-            {...rest}
-          />)
+    receivePatches = ({patches, shouldReset, snapshot}) => {
+      const {editorValue} = this.state
+      const {type} = this.props
+      const remotePatches = patches.filter(patch => patch.origin === 'remote')
+      if (remotePatches.length) {
+        // Document is still in it's placeholder state, replace it completely
+        if (!editorValue.document.nodes || editorValue.document.nodes.first().key === 'first') {
+          this.setState({editorValue: deserialize(snapshot, type)})
+          return
         }
+        const change = patchesToChange(remotePatches, editorValue, snapshot, type)
+        this.setState({editorValue: change.value})
+      }
+    }
 
-        {isDeprecated && (
+    componentWillUnmount() {
+      this.unsubscribe()
+    }
 
-          <FormField
-            label={type.title}
-          >
-            <div className={styles.disabledEditor}>
+    refInput = (input: Input) => {
+      this._input = input
+    }
 
-              <strong>Heads up!</strong>
-              <p>
-                You&apos;re using a new version of the Studio with
+    render() {
+      const {editorValue, deprecatedSchema, deprecatedBlockValue} = this.state
+      const {onChange, ...rest} = this.props
+      const {type} = this.props
+      const isDeprecated = deprecatedSchema || deprecatedBlockValue
+      return (
+        <div className={styles.root}>
+          {!isDeprecated && (
+            <Input
+              editorValue={editorValue}
+              onChange={this.handleChange}
+              ref={this.refInput}
+              {...rest}
+            />
+          )}
 
-                {deprecatedSchema && ' a block schema that hasn\'t been updated.'}
-
-                {deprecatedSchema && deprecatedBlockValue && ' Also block text needs to be updated.'}
-
-                {deprecatedBlockValue && !deprecatedSchema && ' block text that hasn\'t been updated.'}
-              </p>
-              <p>
-                <a
-                  href={generateHelpUrl('migrate-to-block-children')}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  Read more
-                </a>
-              </p>
-            </div>
-          </FormField>
-        )}
-      </div>
-    )
+          {isDeprecated && (
+            <FormField label={type.title}>
+              <div className={styles.disabledEditor}>
+                <strong>Heads up!</strong>
+                <p>
+                  You&apos;re using a new version of the Studio with
+                  {deprecatedSchema && " a block schema that hasn't been updated."}
+                  {deprecatedSchema &&
+                    deprecatedBlockValue &&
+                    ' Also block text needs to be updated.'}
+                  {deprecatedBlockValue &&
+                    !deprecatedSchema &&
+                    " block text that hasn't been updated."}
+                </p>
+                <p>
+                  <a
+                    href={generateHelpUrl('migrate-to-block-children')}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    Read more
+                  </a>
+                </p>
+              </div>
+            </FormField>
+          )}
+        </div>
+      )
+    }
   }
-})
+)

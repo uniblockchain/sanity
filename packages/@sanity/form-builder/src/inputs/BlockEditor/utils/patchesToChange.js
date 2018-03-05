@@ -1,7 +1,7 @@
 // @flow
 import type {Type, Span, Block, SlateValue} from '../typeDefs'
 import {blocksToEditorValue} from '@sanity/block-tools'
-import {Text, Value, Block as SlateBlock} from 'slate'
+import {Text, Block as SlateBlock, Range, Document} from 'slate'
 
 type Path = string | {_key: string}
 
@@ -10,12 +10,11 @@ type Patch = {
   path: Path[]
 }
 
-function findFirstKey(path: Path[]) {
-  const match = path.find(part => part.hasOwnProperty('_key'))
-  if (match) {
-    return match._key || null
-  }
-  return null
+const VALUE_TO_JSON_OPTS = {
+  preserveData: true,
+  preserveKeys: true,
+  preserveSelection: false,
+  preserveHistory: false
 }
 
 function findLastKey(path: Path[]) {
@@ -28,19 +27,6 @@ function findLastKey(path: Path[]) {
   return key
 }
 
-function findPatchedBlock(patch, blocks) {
-  const firstKey = findFirstKey(patch.path)
-  return blocks.find((blk: Block) => blk._key === firstKey) || null
-}
-
-function findPatchedSpan(patch, blocks) {
-  const block = findPatchedBlock(patch, blocks)
-  const lastKey = findLastKey(patch.path)
-  return block && block.children
-    ? block.children.find((spn: Span) => spn._key === lastKey)
-    : null
-}
-
 function findPatchedNodeByKey(key: string, blocks: Block[]) {
   let node
   blocks.forEach(block => {
@@ -48,89 +34,93 @@ function findPatchedNodeByKey(key: string, blocks: Block[]) {
       node = block
       return
     }
-    block.children && block.children.forEach(child => {
-      if (child._key === key) {
-        node = child
-        return
-      }
-    })
+    if (block._type === 'block') {
+      block.children.forEach(child => {
+        if (child._key === key) {
+          node = child
+        }
+      })
+    }
   })
   return node
 }
 
-function replaceTextByKey(change, key, span) {
-  const newText = Text.create({
-    text: span.text,
-    key: key,
-    marks: span.marks.map(name => ({type: name}))
-  })
-  change.replaceNodeByKey(key, newText)
-}
-
-function diffMatchPatch(patch: Patch, change: () => void, blocks: Block[]) {
-  const lastKey = findLastKey(patch.path)
-  const span = findPatchedSpan(patch, blocks)
-  change.call(replaceTextByKey, lastKey, span)
-}
-
 function setPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
-  const lastKey = findLastKey(patch.path)
-  const node = findPatchedNodeByKey(lastKey, blocks)
-  console.log('node', node)
-  if (!node || node._type === 'block') {
-    const value = blocksToEditorValue([node], type)
-    const block = SlateBlock.fromJSON(value.document.nodes[0])
-    console.log('value', value)
-    console.log(lastKey, value.document.nodes[0])
-    if (node) {
-      console.log(block)
-      change.replaceNodeByKey(lastKey, block)
-    } else {
-      change.insertBlock(block)
-    }
-    return change
-  }
+  const editorBlock = blocksToEditorValue([patch.value], type).document.nodes[0]
+  const key = findLastKey(patch.path)
+  change.replaceNodeByKey(key, editorBlock)
+  return change
 }
 
 function insertPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
-  console.log(patch)
-  // const lastKey = findLastKey(patch.path)
-  // const node = findPatchedNodeByKey(lastKey, blocks)
-  // console.log('node', node)
-  // if (!node || node._type === 'block') {
-  //   const value = blocksToEditorValue([node], type)
-  //   const block = SlateBlock.fromJSON(value.document.nodes[0])
-  //   console.log('value', value)
-  //   console.log(lastKey, value.document.nodes[0])
-  //   if (node) {
-  //     console.log(block)
-  //     change.replaceNodeByKey(lastKey, block)
-  //   } else {
-  //     change.insertBlock(block)
-  //   }
-    return change
-  // }
+  const {items, position} = patch
+  const fragment = blocksToEditorValue(items, type)
+  const posKey = findLastKey(patch.path)
+  const firstBlock = change.value.document.nodes.first()
+  let range
+  if (firstBlock && posKey === firstBlock.key && position === 'before') {
+    const rangeText = change.value.document.getFirstText()
+    range = Range.fromJSON({
+      anchorKey: rangeText.key,
+      focusKey: rangeText.key,
+      anchorOffset: 0,
+      focusOffset: 0
+    })
+    change.splitBlockAtRange(range).collapseToEndOfPreviousText()
+    fragment.document.nodes.reverse().forEach(block => {
+      change.insertBlockAtRange(range, block)
+    })
+    change.deleteBackward(1)
+  } else {
+    const rangeText = position === 'before'
+      ? change.value.document.getDescendant(posKey).getPreviousText()
+      : change.value.document.getDescendant(posKey).getLastText()
+    range = Range.fromJSON({
+      anchorKey: rangeText.key,
+      focusKey: rangeText.key,
+      anchorOffset: rangeText.characters.size,
+      focusOffset: rangeText.characters.size
+    })
+    fragment.document.nodes.reverse().forEach(block => {
+      change.insertBlockAtRange(range, block)
+    })
+  }
+  return change
+}
+
+function unsetPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
+  const lastKey = findLastKey(patch.path)
+  change.removeNodeByKey(lastKey)
+  return change
 }
 
 export default function patchesToChange(
-      patches: Patch[],
-      editorValue: SlateValue,
-      blocks: Block[],
-      type: Type
-    ) {
-  const change = editorValue.change()
+  patches: Patch[],
+  editorValue: SlateValue,
+  blocks: Block[],
+  type: Type
+) {
+  const change = editorValue.change({normalize: false})
+  console.log('EDITORVALUE', JSON.stringify(editorValue.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
+  console.log('BLOCKS', JSON.stringify(blocks, null, 2))
   patches.forEach((patch: Patch) => {
-    console.log('Incoming patch', patch)
+    console.log('Incoming patch', JSON.stringify(patch, null, 2))
     switch (patch.type) {
       case 'diffMatchPatch':
-        return diffMatchPatch(patch, change, blocks)
+        diffMatchPatch(patch, change, blocks)
+        break
       case 'set':
-        return setPatch(patch, change, blocks, type)
+        setPatch(patch, change, blocks, type)
+        break
       case 'insert':
-        return insertPatch(patch, change, blocks, type)
+        insertPatch(patch, change, blocks, type)
+        break
+      case 'unset':
+        unsetPatch(patch, change, blocks, type)
+        break
       default:
-        return null
     }
+    console.log('CHANGE:', JSON.stringify(change.value.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
   })
   return change
 }
