@@ -3,6 +3,7 @@
 import randomKey from '../util/randomKey'
 import resolveJsType from '../util/resolveJsType'
 import blockContentTypeToOptions from '../util/blockContentTypeToOptions'
+import normalizeBlock from '../util/normalizeBlock'
 
 import {SLATE_DEFAULT_BLOCK} from '../constants'
 
@@ -20,23 +21,20 @@ function hasKeys(obj) {
 
 function toRawMark(markName) {
   return {
-    kind: 'mark',
+    object: 'mark',
     type: markName
   }
 }
 
-function sanitySpanToRawSlateBlockNode(span, sanityBlock, blockContentFeatures) {
+function sanitySpanToRawSlateBlockNode(span, sanityBlock, blockContentFeatures, childIndex) {
 
-  if (!span._key) {
-    span._key = randomKey(12)
-  }
-
+  // Inline object
   if (span._type !== 'span') {
     return {
-      kind: 'inline',
+      object: 'inline',
       isVoid: true,
+      key: `${sanityBlock._key}${childIndex()}`,
       type: span._type,
-      key: span._key,
       data: {value: span},
       nodes: []
     }
@@ -57,29 +55,26 @@ function sanitySpanToRawSlateBlockNode(span, sanityBlock, blockContentFeatures) 
       }
     })
   }
-
   const leaf = {
-    kind: 'leaf',
+    object: 'leaf',
     text: text,
     marks: decorators.filter(Boolean).map(toRawMark)
   }
-
   if (!annotations) {
-    return {kind: 'text', key: span._key, leaves: [leaf]}
+    return {object: 'text', leaves: [leaf], key: `${sanityBlock._key}${childIndex()}`}
   }
 
   return {
-    kind: 'inline',
+    object: 'inline',
     isVoid: false,
-    key: span._key,
     type: 'span',
     data: {annotations},
-    nodes: [{kind: 'text', leaves: [leaf]}]
+    nodes: [{object: 'text', leaves: [leaf], key: `${sanityBlock._key}${childIndex()}`}]
   }
 }
 
 // Block type object
-function sanityBlockToRawNode(sanityBlock, type, blockContentFeatures) {
+function sanityBlockToRawNode(sanityBlock, type, blockContentFeatures, options = {}) {
   const {children, _type, markDefs, ...rest} = sanityBlock
   let restData = {}
   if (hasKeys(rest)) {
@@ -106,11 +101,13 @@ function sanityBlockToRawNode(sanityBlock, type, blockContentFeatures) {
     sanityBlock._key = randomKey(12)
   }
 
-  // Enforce the data to have the same key
-  restData.data._key = sanityBlock._key
+  let index = 0
+  const childIndex = () => {
+    return index++
+  }
 
-  return {
-    kind: 'block',
+  const block =  {
+    object: 'block',
     key: sanityBlock._key,
     isVoid: false,
     type: 'contentBlock',
@@ -118,9 +115,15 @@ function sanityBlockToRawNode(sanityBlock, type, blockContentFeatures) {
     nodes: children
       .map(child => sanitySpanToRawSlateBlockNode(
         child,
-        sanityBlock, blockContentFeatures
+        sanityBlock,
+        blockContentFeatures,
+        childIndex
       ))
   }
+  if (options.normalize) {
+    return normalizeBlock(block)
+  }
+  return block
 }
 
 // Embedded object
@@ -129,41 +132,46 @@ function sanityBlockItemToRaw(blockItem, type) {
     blockItem._key = randomKey(12)
   }
   return {
-    kind: 'block',
+    object: 'block',
     key: blockItem._key,
     type: type ? type.name : '__unknown',
     isVoid: true,
     data: {value: blockItem},
-    nodes: []
+    nodes: [{
+      object: 'text',
+      leaves: [{
+        object: 'leaf',
+        text: '',
+        marks: []
+      }]
+    }]
   }
 }
 
-function sanityBlockItemToRawNode(blockItem, type, blockContentFeatures) {
+function sanityBlockItemToRawNode(blockItem, type, blockContentFeatures, options) {
   const blockItemType = resolveTypeName(blockItem)
 
   const memberType = type.of.find(ofType => ofType.name === blockItemType)
 
   return blockItemType === 'block'
-    ? sanityBlockToRawNode(blockItem, memberType, blockContentFeatures)
+    ? sanityBlockToRawNode(blockItem, memberType, blockContentFeatures, options)
     : sanityBlockItemToRaw(blockItem, memberType)
 }
 
-function sanityBlocksArrayToRawNodes(blockArray, type, blockContentFeatures) {
-  return blockArray
-    .filter(Boolean) // this is a temporary guard against null values, @todo: remove
-    .map(item => sanityBlockItemToRawNode(item, type, blockContentFeatures))
+function sanityBlocksArrayToRawNodes(blockArray, type, blockContentFeatures, options = {}) {
+  return blockArray.map(item => sanityBlockItemToRawNode(item, type, blockContentFeatures, options))
 }
 
-export default function blocksToSlateState(array: [], type: any) {
-  const defaultNodes = [{...SLATE_DEFAULT_BLOCK, nodes: [{kind: 'text', text: ''}]}]
+export default function blocksToEditorValue(array: [], type: any, options = {}) {
+  const defaultNodes = [{...SLATE_DEFAULT_BLOCK, key: 'first', nodes: [{object: 'text', text: ''}]}]
   const blockContentFeatures = blockContentTypeToOptions(type)
   return {
-    kind: 'state',
+    object: 'state',
     document: {
-      kind: 'document',
+      object: 'document',
       data: {},
       nodes: (array && array.length > 0)
-        ? sanityBlocksArrayToRawNodes(array, type, blockContentFeatures)
+        ? sanityBlocksArrayToRawNodes(array, type, blockContentFeatures, options)
         : defaultNodes
     }
   }

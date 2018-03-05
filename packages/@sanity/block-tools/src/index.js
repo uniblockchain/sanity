@@ -5,6 +5,7 @@ import _blocksToEditorValue from './converters/blocksToEditorValue'
 import _editorValueToBlocks from './converters/editorValueToBlocks'
 import HtmlDeserializer from './HtmlDeserializer'
 import {SLATE_DEFAULT_BLOCK} from './constants'
+import _normalizeBlock from './util/normalizeBlock'
 
 /**
  * BlockTools - various tools for Sanity block content
@@ -28,7 +29,7 @@ const blockContentFunctions = {
    *      API compatible model as returned from DOMParser for using server side.
    * @returns {Array} Blocks
    */
-  htmlToBlocks(html: string, blockContentType: {}, options: {} = {}) {
+  htmlToBlocks(html: string, blockContentType: {}, options={}) {
     const deserializer = new HtmlDeserializer(blockContentType, options)
     return deserializer.deserialize(html)
   },
@@ -40,8 +41,8 @@ const blockContentFunctions = {
    * @param {Object} blockContentType
    * @returns {Array} Blocks
    */
-  editorValueToBlocks(value, blockContentType) {
-    return _editorValueToBlocks(value, blockContentType)
+  editorValueToBlocks(value, blockContentType, options={}) {
+    return _editorValueToBlocks(value, blockContentType, options)
   },
 
   /**
@@ -51,8 +52,8 @@ const blockContentFunctions = {
    * @param {Object} blockContentType
    * @returns {Object} An object representing the serialized editor value.
    */
-  blocksToEditorValue(blocks, blockContentType) {
-    return _blocksToEditorValue(blocks, blockContentType)
+  blocksToEditorValue(blocks, blockContentType, options={}) {
+    return _blocksToEditorValue(blocks, blockContentType, options)
   },
 
   /**
@@ -74,3 +75,4 @@ export const htmlToBlocks = blockContentFunctions.htmlToBlocks
 export const editorValueToBlocks = blockContentFunctions.editorValueToBlocks
 export const blocksToEditorValue = blockContentFunctions.blocksToEditorValue
 export const getBlockContentFeatures = blockContentFunctions.getBlockContentFeatures
+export const normalizeBlock = _normalizeBlock
