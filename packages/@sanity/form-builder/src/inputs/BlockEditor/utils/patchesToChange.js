@@ -1,20 +1,13 @@
 // @flow
-import type {Type, Span, Block, SlateValue} from '../typeDefs'
+import type {Type, Block} from '../typeDefs'
 import {blocksToEditorValue} from '@sanity/block-tools'
-import {Text, Block as SlateBlock, Range, Document} from 'slate'
+import {Value, Range} from 'slate'
 
 type Path = string | {_key: string}
 
 type Patch = {
   type: string,
   path: Path[]
-}
-
-const VALUE_TO_JSON_OPTS = {
-  preserveData: true,
-  preserveKeys: true,
-  preserveSelection: false,
-  preserveHistory: false
 }
 
 function findLastKey(path: Path[]) {
@@ -27,32 +20,14 @@ function findLastKey(path: Path[]) {
   return key
 }
 
-function findPatchedNodeByKey(key: string, blocks: Block[]) {
-  let node
-  blocks.forEach(block => {
-    if (block._key === key) {
-      node = block
-      return
-    }
-    if (block._type === 'block') {
-      block.children.forEach(child => {
-        if (child._key === key) {
-          node = child
-        }
-      })
-    }
-  })
-  return node
-}
-
-function setPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
+function setPatch(patch: Patch, change: () => void, type: Type) {
   const editorBlock = blocksToEditorValue([patch.value], type).document.nodes[0]
   const key = findLastKey(patch.path)
   change.replaceNodeByKey(key, editorBlock)
   return change
 }
 
-function insertPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
+function insertPatch(patch: Patch, change: () => void, type: Type) {
   const {items, position} = patch
   const fragment = blocksToEditorValue(items, type)
   const posKey = findLastKey(patch.path)
@@ -88,39 +63,41 @@ function insertPatch(patch: Patch, change: () => void, blocks: Block[], type: Ty
   return change
 }
 
-function unsetPatch(patch: Patch, change: () => void, blocks: Block[], type: Type) {
+function unsetPatch(patch: Patch, change: () => void) {
   const lastKey = findLastKey(patch.path)
   change.removeNodeByKey(lastKey)
   return change
 }
 
+function replaceValue(snapshot: Blocks[], type: Type) {
+  return Value.fromJSON(blocksToEditorValue(snapshot, type)).change()
+}
+
 export default function patchesToChange(
   patches: Patch[],
-  editorValue: SlateValue,
-  blocks: Block[],
+  editorValue: Value,
+  snapshot: Block[],
   type: Type
 ) {
-  const change = editorValue.change({normalize: false})
-  console.log('EDITORVALUE', JSON.stringify(editorValue.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
-  console.log('BLOCKS', JSON.stringify(blocks, null, 2))
+  let change = editorValue.change({normalize: false})
+  // console.log('EDITORVALUE', JSON.stringify(editorValue.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
+  // console.log('BLOCKS', JSON.stringify(blocks, null, 2))
   patches.forEach((patch: Patch) => {
-    console.log('Incoming patch', JSON.stringify(patch, null, 2))
+    // console.log('INCOMING PATCH', JSON.stringify(patch, null, 2))
     switch (patch.type) {
-      case 'diffMatchPatch':
-        diffMatchPatch(patch, change, blocks)
-        break
       case 'set':
-        setPatch(patch, change, blocks, type)
+        setPatch(patch, change, type)
         break
       case 'insert':
-        insertPatch(patch, change, blocks, type)
+        insertPatch(patch, change, type)
         break
       case 'unset':
-        unsetPatch(patch, change, blocks, type)
+        unsetPatch(patch, change)
         break
       default:
+        change = replaceValue(snapshot, type)
     }
-    console.log('CHANGE:', JSON.stringify(change.value.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
+    // console.log('CHANGE', JSON.stringify(change.value.document.toJSON(VALUE_TO_JSON_OPTS), null, 2))
   })
   return change
 }

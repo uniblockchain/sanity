@@ -1,7 +1,7 @@
 // @flow
 import type {Block, Type} from '../typeDefs'
 import {Change, Range, Operation} from 'slate'
-import {flatten, isEqual} from 'lodash'
+import {flatten} from 'lodash'
 import {editorValueToBlocks, normalizeBlock} from '@sanity/block-tools'
 import {unset, set, insert, setIfMissing} from '../../../PatchEvent'
 import {applyAll} from '../../../simplePatch'
@@ -16,8 +16,8 @@ const VALUE_TO_JSON_OPTS = {
 
 // Set a real key on the block inserted by slate in the editor
 // before anything is written to the server, when it's time to
-// actually write it (edits are deon). In other listening block editors,
-// the placeholder block will be replaced with this one.
+// actually write it (user has edited something).
+// In other listening block editors, the placeholder block will be replaced with this one.
 function removePlaceholderBlockKey(blocks) {
   const first = blocks.find(block => block._key === 'first')
   if (first) {
@@ -63,6 +63,9 @@ function insertNodePatch(change: Change, operation: Operation, blocks: Block[], 
     blockContentType
   )
   if (operation.path.length === 1) {
+    if (blocks.length === 0) {
+      return [setIfMissing(removePlaceholderBlockKey(appliedBlocks))]
+    }
     let position = 'after'
     let afterKey
     if (operation.path[0] === 0) {
@@ -222,7 +225,7 @@ export default function changeToPatches(
     operations
       .map((operation: Operation) => {
         let _patches
-        console.log('OPERATION:', JSON.stringify(operation.toJSON(), null, 2))
+        // console.log('OPERATION:', JSON.stringify(operation.toJSON(), null, 2))
         switch (operation.type) {
           case 'set_selection':
             setSelection(operation, selection)
